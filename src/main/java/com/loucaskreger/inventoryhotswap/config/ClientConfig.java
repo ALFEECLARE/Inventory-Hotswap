@@ -1,16 +1,17 @@
 package com.loucaskreger.inventoryhotswap.config;
 
 import com.loucaskreger.inventoryhotswap.client.GuiRenderType;
-import net.minecraftforge.common.ForgeConfigSpec;
-import net.minecraftforge.common.ForgeConfigSpec.BooleanValue;
-import net.minecraftforge.common.ForgeConfigSpec.EnumValue;
+
+import net.neoforged.neoforge.common.ModConfigSpec;
+import net.neoforged.neoforge.common.ModConfigSpec.BooleanValue;
+import net.neoforged.neoforge.common.ModConfigSpec.EnumValue;
 
 public class ClientConfig {
 
     public static EnumValue<GuiRenderType> guiRenderType;
     public static BooleanValue inverted;
 
-    public ClientConfig(ForgeConfigSpec.Builder builder) {
+    public ClientConfig(ModConfigSpec.Builder builder) {
         guiRenderType = builder.comment(
                 "PUSHED will push up the players survival gui(hearts, xp bar, hunger, armor, air) above the vertical selection slots.\n"
                         + "If set to INVISIBLE, then the survival gui will not be rendered when keybind it pressed.\n"

@@ -24,6 +24,7 @@ import net.minecraft.client.multiplayer.MultiPlayerGameMode;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.entity.ItemRenderer;
 import net.minecraft.core.NonNullList;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
@@ -32,20 +33,18 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.client.event.InputEvent;
-import net.minecraftforge.client.event.RenderGuiOverlayEvent;
-import net.minecraftforge.client.gui.overlay.ForgeGui;
-import net.minecraftforge.client.gui.overlay.VanillaGuiOverlay;
-import net.minecraftforge.event.TickEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.event.config.ModConfigEvent;
-import net.minecraftforge.fml.loading.moddiscovery.ModFileInfo;
-import net.minecraftforge.fml.util.ObfuscationReflectionHelper;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.fml.event.config.ModConfigEvent;
+import net.neoforged.fml.loading.moddiscovery.ModFileInfo;
+import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.neoforge.client.event.InputEvent;
+import net.neoforged.neoforge.client.event.RenderGuiLayerEvent;
+import net.neoforged.neoforge.client.gui.VanillaGuiLayers;
 
 
-@Mod.EventBusSubscriber(modid = InventoryHotswap.MOD_ID, value = Dist.CLIENT)
+@EventBusSubscriber(modid = InventoryHotswap.MOD_ID, value = Dist.CLIENT)
 public class EventSubscriber {
 
     public static final KeyMapping vertScroll = new KeyMapping(InventoryHotswap.MOD_ID + ".key.verticalscroll",
@@ -56,9 +55,11 @@ public class EventSubscriber {
 
     private static final int[] selectedScrollPositions = {65, 43, 21, -1};
 //	private static final int[] largeSelectedScrollPositions = { 65, 43, 21, -1 };
-    private static final List<ResourceLocation> ALWAYS_HIDE_OVERLAYS = List.of(VanillaGuiOverlay.EXPERIENCE_BAR.id(), VanillaGuiOverlay.MOUNT_HEALTH.id(), VanillaGuiOverlay.JUMP_BAR.id());
-    private static final List<ResourceLocation> HIDE_WHEN_GUI_INVISIBLE_OVERLAY = List.of(VanillaGuiOverlay.FOOD_LEVEL.id(),VanillaGuiOverlay.PLAYER_HEALTH.id(), VanillaGuiOverlay.ARMOR_LEVEL.id(), VanillaGuiOverlay.AIR_LEVEL.id());
-    private static final Map<ResourceLocation, Integer> PUSHED_GUI_LAYER = Map.ofEntries(entry(VanillaGuiOverlay.FOOD_LEVEL.id() ,1), entry(VanillaGuiOverlay.PLAYER_HEALTH.id(), 2), entry(VanillaGuiOverlay.ARMOR_LEVEL.id(), 1), entry(VanillaGuiOverlay.AIR_LEVEL.id(), 2));
+    private static final List<ResourceLocation> ALWAYS_HIDE_OVERLAYS = List.of(VanillaGuiLayers.EXPERIENCE_BAR, VanillaGuiLayers.VEHICLE_HEALTH, VanillaGuiLayers.JUMP_METER);
+    private static final List<ResourceLocation> HIDE_WHEN_GUI_INVISIBLE_OVERLAY = List.of(VanillaGuiLayers.FOOD_LEVEL,VanillaGuiLayers.PLAYER_HEALTH, VanillaGuiLayers.ARMOR_LEVEL, VanillaGuiLayers.AIR_LEVEL);
+    private static final Map<ResourceLocation, Integer> PUSHED_GUI_LAYER = Map.ofEntries(entry(VanillaGuiLayers.FOOD_LEVEL ,1), entry(VanillaGuiLayers.PLAYER_HEALTH, 2), entry(VanillaGuiLayers.ARMOR_LEVEL, 1), entry(VanillaGuiLayers.AIR_LEVEL, 2));
+
+	private static final ResourceLocation ACTUAL_ARMOR_TEXTURES = ResourceLocation.withDefaultNamespace("textures/gui/sprites/hud/armor_full.png");
 
     /**
      * The value of the left_height and right_height in {@link ForgeIngameGui}
@@ -67,19 +68,8 @@ public class EventSubscriber {
     private static final int WIDTH = 22;
     private static final int HEIGHT = 66;
 
-    private static final ResourceLocation VERT_TEXTURE = new ResourceLocation(InventoryHotswap.MOD_ID,
-            "textures/gui/verticalbar.png");
-    private static final ResourceLocation TEXTURE = new ResourceLocation(InventoryHotswap.MOD_ID,
-            "textures/gui/largebarselection.png");
-
-    private static ResourceLocation WIDGETS_TEXTURE_PATH;
-
-
-    static {
-
-        WIDGETS_TEXTURE_PATH = ObfuscationReflectionHelper.getPrivateValue(Gui.class, null,
-                /* WIDGETS_TEXTURE_PATH */ "f_92982_");
-    }
+    private static final ResourceLocation VERT_TEXTURE = ResourceLocation.fromNamespaceAndPath(InventoryHotswap.MOD_ID, "textures/gui/verticalbar.png");
+    private static final ResourceLocation TEXTURE = ResourceLocation.fromNamespaceAndPath(InventoryHotswap.MOD_ID, "textures/gui/largebarselection.png");
 
     private static int accumulatedScrollDelta = 0;
     private static int textOffset = 0;
@@ -100,8 +90,6 @@ public class EventSubscriber {
     //another mod compatibility
     public static ModFileInfo ipn = null;
 
-
-    @SubscribeEvent
     public static void onModConfigEvent(final ModConfigEvent configEvent) {
         if (configEvent.getConfig().getSpec() == Config.CLIENT_SPEC) {
             Config.bakeConfig();
@@ -112,7 +100,7 @@ public class EventSubscriber {
     public static void onMouseScroll(final InputEvent.MouseScrollingEvent event) {
         if (wasKeyDown) {
             event.setCanceled(true);
-            accumulatedScrollDelta += event.getScrollDelta();
+            accumulatedScrollDelta += event.getScrollDeltaY();
             accumulatedScrollDelta %= 4;
         }
     }
@@ -144,20 +132,20 @@ public class EventSubscriber {
     }
 
     @SubscribeEvent
-    public static void onGUIRender(final RenderGuiOverlayEvent.Pre event) {
-    	if (isHideHotbar && event.getOverlay().id().equals(VanillaGuiOverlay.HOTBAR.id())) {
+    public static void onGUIRender(final RenderGuiLayerEvent.Pre event) {
+    	if (isHideHotbar && event.getName().equals(VanillaGuiLayers.HOTBAR)) {
     		event.setCanceled(true);
     	}
         if (wasKeyDown) {
-        	ForgeGui forgeGui = (ForgeGui) mc.gui;
-        	if ((isGuiInvisible || isGuiPushed) && ALWAYS_HIDE_OVERLAYS.contains(event.getOverlay().id())) {
+        	Gui forgeGui = (Gui) mc.gui;
+        	if ((isGuiInvisible || isGuiPushed) && ALWAYS_HIDE_OVERLAYS.contains(event.getName())) {
         		event.setCanceled(true);
-        	} else if (isGuiInvisible && HIDE_WHEN_GUI_INVISIBLE_OVERLAY.contains(event.getOverlay().id())) {
+        	} else if (isGuiInvisible && HIDE_WHEN_GUI_INVISIBLE_OVERLAY.contains(event.getName())) {
     			event.setCanceled(true);
-            } else if (isGuiPushed && PUSHED_GUI_LAYER.containsKey(event.getOverlay().id())) {
+            } else if (isGuiPushed && PUSHED_GUI_LAYER.containsKey(event.getName())) {
                 //ObfuscationReflectionHelper.setPrivateValue(ForgeGui.class, (ForgeGui) mc.gui, DEFAULT_GUI_HEIGHT + HEIGHT, "left_height");
                 //ObfuscationReflectionHelper.setPrivateValue(ForgeGui.class, (ForgeGui) mc.gui, DEFAULT_GUI_HEIGHT + HEIGHT, "right_height");
-            	int layer = PUSHED_GUI_LAYER.get(event.getOverlay().id()) - 1;
+            	int layer = PUSHED_GUI_LAYER.get(event.getName()) - 1;
             	forgeGui.leftHeight = DEFAULT_GUI_HEIGHT + HEIGHT + layer * 10;
             	forgeGui.rightHeight = DEFAULT_GUI_HEIGHT + HEIGHT + layer * 10;
                 textOffset = 29;
@@ -166,7 +154,7 @@ public class EventSubscriber {
     }
 
     @SubscribeEvent
-    public static void onGUIRender(final RenderGuiOverlayEvent.Post event) {
+    public static void onGUIRender(final RenderGuiLayerEvent.Post event) {
 
         Minecraft mc = Minecraft.getInstance();
         NonNullList<ItemStack> inventory = mc.player.getInventory().items;
@@ -192,9 +180,9 @@ public class EventSubscriber {
                     matrixStack.pushPose();
                     RenderSystem.setShaderColor(1F, 1F, 1F, 1.0F);
                     RenderSystem.enableBlend();
-                    RenderSystem.setShaderTexture(0, WIDGETS_TEXTURE_PATH);
+                    RenderSystem.setShaderTexture(0, ACTUAL_ARMOR_TEXTURES);
                     for (int i = 0; i < 4; i++) {
-                        gui.blit(WIDGETS_TEXTURE_PATH, width - 91, scaledHeight - WIDTH - (i * 22), 0, 0, 182, 22);
+                        gui.blitSprite(Gui.HOTBAR_SPRITE, width - 91, scaledHeight - WIDTH - (i * 22), 182, 22);
                     }
 
                     RenderSystem.disableBlend();
@@ -211,13 +199,13 @@ public class EventSubscriber {
                         int j1 = width - 90 + i1 * 20 + 2;
                         int k1 = scaledHeight - 16 - 3;
 
-                        renderHotbarItem(gui, matrixStack, j1, k1, event.getPartialTick(), inventory.get(i1), itemRenderer,
+                        renderHotbarItem(gui, matrixStack, j1, k1, event.getPartialTick().getGameTimeDeltaTicks(), inventory.get(i1), itemRenderer,
                                 fontRenderer);
-                        renderHotbarItem(gui, matrixStack, j1, k1 - 22, event.getPartialTick(), inventory.get(i1 + 27),
+                        renderHotbarItem(gui, matrixStack, j1, k1 - 22, event.getPartialTick().getGameTimeDeltaTicks(), inventory.get(i1 + 27),
                                 itemRenderer, fontRenderer);
-                        renderHotbarItem(gui, matrixStack, j1, k1 - 44, event.getPartialTick(), inventory.get(i1 + 18),
+                        renderHotbarItem(gui, matrixStack, j1, k1 - 44, event.getPartialTick().getGameTimeDeltaTicks(), inventory.get(i1 + 18),
                                 itemRenderer, fontRenderer);
-                        renderHotbarItem(gui, matrixStack, j1, k1 - 66, event.getPartialTick(), inventory.get(i1 + 9),
+                        renderHotbarItem(gui, matrixStack, j1, k1 - 66, event.getPartialTick().getGameTimeDeltaTicks(), inventory.get(i1 + 9),
                                 itemRenderer, fontRenderer);
                     }
                     matrixStack.pushPose();
@@ -228,7 +216,7 @@ public class EventSubscriber {
                     // Render the selection square
                     gui.blit(TEXTURE, width - 92, scaledHeight - WIDTH - HEIGHT + scrollFunc(), 0, 0, 184, 24);
 
-                    RenderSystem.setShaderTexture(0, Gui.GUI_ICONS_LOCATION);
+                    RenderSystem.setShaderTexture(0, ACTUAL_ARMOR_TEXTURES);
                     int x = scaledWidth / 2 - 91;
 
                     renderVehicleHealth(gui, matrixStack, scaledHeight, scaledWidth);
@@ -245,9 +233,9 @@ public class EventSubscriber {
                     matrixStack.pushPose();
                     RenderSystem.setShaderColor(1F, 1F, 1F, 1.0F);
                     RenderSystem.enableBlend();
-                    RenderSystem.setShaderTexture(0, WIDGETS_TEXTURE_PATH);
+                    RenderSystem.setShaderTexture(0, ACTUAL_ARMOR_TEXTURES);
                     // Re-render hotbar without selection
-                    gui.blit(WIDGETS_TEXTURE_PATH, width - 91, scaledHeight - WIDTH, 0, 0, 182, 22);
+                    gui.blitSprite(Gui.HOTBAR_SPRITE, width - 91, scaledHeight - WIDTH, 182, 22);
 
                     RenderSystem.disableBlend();
                     matrixStack.popPose();
@@ -255,7 +243,7 @@ public class EventSubscriber {
                     for (int i1 = 0; i1 < 9; ++i1) {
                         int j1 = width - 90 + i1 * 20 + 2;
                         int k1 = scaledHeight - 16 - 3;
-                        renderHotbarItem(gui, matrixStack, j1, k1, event.getPartialTick(), inventory.get(i1), itemRenderer,
+                        renderHotbarItem(gui, matrixStack, j1, k1, event.getPartialTick().getGameTimeDeltaTicks(), inventory.get(i1), itemRenderer,
                                 fontRenderer);
                     }
 
@@ -279,20 +267,20 @@ public class EventSubscriber {
                         int k1 = scaledHeight - 16 - 3;
                         ItemStack stack = inventory.get(currentIndex + i);
 
-                        renderHotbarItem(gui, matrixStack, j1, k1 - j, event.getPartialTick(), stack, itemRenderer,
+                        renderHotbarItem(gui, matrixStack, j1, k1 - j, event.getPartialTick().getGameTimeDeltaTicks(), stack, itemRenderer,
                                 fontRenderer);
                     }
 
-                    RenderSystem.setShaderTexture(0, WIDGETS_TEXTURE_PATH);
+                    RenderSystem.setShaderTexture(0, ACTUAL_ARMOR_TEXTURES);
                     // Render the selection square
-                    gui.blit(WIDGETS_TEXTURE_PATH, width - 92 + (currentIndex * (WIDTH - 2)),
-                            scaledHeight - WIDTH - HEIGHT + scrollFunc(), 0, 22, 24, 24);
+                    gui.blitSprite(Gui.HOTBAR_SELECTION_SPRITE, width - 92 + (currentIndex * (WIDTH - 2)),
+                            scaledHeight - WIDTH - HEIGHT + scrollFunc(), 24, 24);
 
                     renderSelectedItem(gui, matrixStack, mc, scaledWidth, scaledHeight,
                             fontRenderer);
 
                     // Reset the icon texture to stop hearts and hunger from being screwed up.
-                    RenderSystem.setShaderTexture(0, Gui.GUI_ICONS_LOCATION);
+                    RenderSystem.setShaderTexture(0, ACTUAL_ARMOR_TEXTURES);
 
                     int x = scaledWidth / 2 - 91;
 
@@ -359,14 +347,16 @@ public class EventSubscriber {
 
     public static void renderHorseJumpBar(GuiGraphics gui,PoseStack matrixStack, int x, int scaledHeight) {
         mc.getProfiler().push("jumpBar");
-        RenderSystem.setShaderTexture(0, Gui.GUI_ICONS_LOCATION);
+        RenderSystem.setShaderTexture(0, ACTUAL_ARMOR_TEXTURES);
         float f = mc.player.getJumpRidingScale();
 //		int i = 182;
         int j = (int) (f * 183.0F);
         int k = scaledHeight - 32 + 3 - HEIGHT;
-        gui.blit(Gui.GUI_ICONS_LOCATION, x, k, 0, 84, 182, 5);
-        if (j > 0) {
-            gui.blit(Gui.GUI_ICONS_LOCATION, x, k, 0, 89, j, 5);
+        gui.blitSprite(Gui.JUMP_BAR_BACKGROUND_SPRITE, x, k, 182, 5);
+        if (mc.player.jumpableVehicle().getJumpCooldown() > 0) {
+        	gui.blitSprite(Gui.JUMP_BAR_COOLDOWN_SPRITE, x, k, 182, 5);
+        } else if (j > 0) {
+            gui.blitSprite(Gui.JUMP_BAR_PROGRESS_SPRITE, x, k, j, 5);
         }
 
         mc.getProfiler().pop();
@@ -392,13 +382,13 @@ public class EventSubscriber {
                         int i2 = 52;
                         int j2 = 0;
                         int k2 = l - l1 * 8 - 9;
-                        gui.blit(Gui.GUI_ICONS_LOCATION, k2, i1, 52 + j2 * 9, 9, 9, 9);
+                        gui.blitSprite(Gui.HEART_VEHICLE_CONTAINER_SPRITE, k2, i1, 9, 9);
                         if (l1 * 2 + 1 + j1 < j) {
-                            gui.blit(Gui.GUI_ICONS_LOCATION, k2, i1, 88, 9, 9, 9);
+                            gui.blitSprite(Gui.HEART_VEHICLE_FULL_SPRITE, k2, i1, 9, 9);
                         }
 
                         if (l1 * 2 + 1 + j1 == j) {
-                            gui.blit(Gui.GUI_ICONS_LOCATION, k2, i1, 97, 9, 9, 9);
+                            gui.blitSprite(Gui.HEART_VEHICLE_HALF_SPRITE, k2, i1, 9, 9);
                         }
                     }
 
@@ -446,16 +436,16 @@ public class EventSubscriber {
     public static void renderExpBar(GuiGraphics gui, PoseStack matrixStack, int x) {
         if (isGuiPushed) {
 
-            RenderSystem.setShaderTexture(0, Gui.GUI_ICONS_LOCATION);
+            RenderSystem.setShaderTexture(0, ACTUAL_ARMOR_TEXTURES);
             int i = mc.player.getXpNeededForNextLevel();
             if (i > 0) {
                 int j = 182;
                 int k = (int) (mc.player.experienceLevel * 183.0F);
                 // -32 + 3
                 int l = mc.getWindow().getGuiScaledHeight() - 29 - HEIGHT;
-                gui.blit(Gui.GUI_ICONS_LOCATION, x, l, 0, 64, j, 5);
+                gui.blitSprite(Gui.EXPERIENCE_BAR_BACKGROUND_SPRITE, x, l, j, 5);
                 if (k > 0) {
-                   gui.blit(Gui.GUI_ICONS_LOCATION, x, l, 0, 69, k, 5);
+                   gui.blitSprite(Gui.EXPERIENCE_BAR_PROGRESS_SPRITE, x, l, k, 5);
                 }
             }
 
@@ -479,7 +469,7 @@ public class EventSubscriber {
 
             MutableComponent mutablecomponent = Component.empty().append(highlightingItemStack.getHoverName()).withStyle(highlightingItemStack.getRarity().getStyleModifier());
 
-            if (highlightingItemStack.hasCustomHoverName()) {
+            if (highlightingItemStack.get(DataComponents.CUSTOM_NAME) != null) {
                 mutablecomponent.withStyle(ChatFormatting.ITALIC);
             }
 
@@ -522,7 +512,7 @@ public class EventSubscriber {
     }
 
     @SubscribeEvent
-    public static void onClientTick(final TickEvent.ClientTickEvent event) {
+    public static void onClientTick(final ClientTickEvent.Post event) {
         Minecraft mc = Minecraft.getInstance();
         MultiPlayerGameMode pc = mc.gameMode;
         if (mc.player != null) {
@@ -595,7 +585,7 @@ public class EventSubscriber {
         remainingHighlightTicks = 0;
         highlightingItemStack = ItemStack.EMPTY;
         renderEntireBar = false;
-    	ForgeGui forgeGui = (ForgeGui) mc.gui;
+    	Gui forgeGui = (Gui) mc.gui;
     	forgeGui.leftHeight = DEFAULT_GUI_HEIGHT;
     	forgeGui.rightHeight = DEFAULT_GUI_HEIGHT;
     }
