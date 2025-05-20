@@ -19,5 +19,4 @@ public class ClientConfig {
                 .defineEnum("guiRenderType", GuiRenderType.PUSHED);
         inverted = builder.comment("Set to true if you want the quick selection key presses to be inverted.").define("invertQuickSelection", false);
     }
-
 }
