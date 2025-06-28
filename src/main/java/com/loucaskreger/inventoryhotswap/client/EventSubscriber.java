@@ -22,12 +22,14 @@ import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.multiplayer.MultiPlayerGameMode;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.entity.ItemRenderer;
 import net.minecraft.core.NonNullList;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.profiling.Profiler;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
@@ -182,7 +184,7 @@ public class EventSubscriber {
                     RenderSystem.enableBlend();
                     RenderSystem.setShaderTexture(0, ACTUAL_ARMOR_TEXTURES);
                     for (int i = 0; i < 4; i++) {
-                        gui.blitSprite(Gui.HOTBAR_SPRITE, width - 91, scaledHeight - WIDTH - (i * 22), 182, 22);
+                        gui.blitSprite(RenderType.GUI_TEXTURED, Gui.HOTBAR_SPRITE, width - 91, scaledHeight - WIDTH - (i * 22), 182, 22);
                     }
 
                     RenderSystem.disableBlend();
@@ -214,7 +216,7 @@ public class EventSubscriber {
 
                     RenderSystem.setShaderTexture(0, TEXTURE);
                     // Render the selection square
-                    gui.blit(TEXTURE, width - 92, scaledHeight - WIDTH - HEIGHT + scrollFunc(), 0, 0, 184, 24);
+                    gui.blit(RenderType.GUI_TEXTURED, TEXTURE, width - 92, scaledHeight - WIDTH - HEIGHT + scrollFunc(), 0f, 0f, 184, 24, 256, 256);
 
                     RenderSystem.setShaderTexture(0, ACTUAL_ARMOR_TEXTURES);
                     int x = scaledWidth / 2 - 91;
@@ -235,7 +237,7 @@ public class EventSubscriber {
                     RenderSystem.enableBlend();
                     RenderSystem.setShaderTexture(0, ACTUAL_ARMOR_TEXTURES);
                     // Re-render hotbar without selection
-                    gui.blitSprite(Gui.HOTBAR_SPRITE, width - 91, scaledHeight - WIDTH, 182, 22);
+                    gui.blitSprite(RenderType.GUI_TEXTURED, Gui.HOTBAR_SPRITE, width - 91, scaledHeight - WIDTH, 182, 22);
 
                     RenderSystem.disableBlend();
                     matrixStack.popPose();
@@ -253,8 +255,8 @@ public class EventSubscriber {
 
                     RenderSystem.setShaderTexture(0, VERT_TEXTURE);
                     // Render the verticalbar
-                    gui.blit(VERT_TEXTURE, width - 91 + (currentIndex * (WIDTH - 2)), scaledHeight - WIDTH - HEIGHT, 0,
-                            0, WIDTH, HEIGHT);
+                    gui.blit(RenderType.GUI_TEXTURED, VERT_TEXTURE, width - 91 + (currentIndex * (WIDTH - 2)), scaledHeight - WIDTH - HEIGHT, 0,
+                            0, WIDTH, HEIGHT, 256, 256);
 
                     for (int k = 3; k > 0; k--) {
                         int l = ClientConfig.inverted.get() ? Math.abs(k - 3) + 1 : k;
@@ -273,7 +275,7 @@ public class EventSubscriber {
 
                     RenderSystem.setShaderTexture(0, ACTUAL_ARMOR_TEXTURES);
                     // Render the selection square
-                    gui.blitSprite(Gui.HOTBAR_SELECTION_SPRITE, width - 92 + (currentIndex * (WIDTH - 2)),
+                    gui.blitSprite(RenderType.GUI_TEXTURED, Gui.HOTBAR_SELECTION_SPRITE, width - 92 + (currentIndex * (WIDTH - 2)),
                             scaledHeight - WIDTH - HEIGHT + scrollFunc(), 24, 24);
 
                     renderSelectedItem(gui, matrixStack, mc, scaledWidth, scaledHeight,
@@ -346,20 +348,20 @@ public class EventSubscriber {
     }
 
     public static void renderHorseJumpBar(GuiGraphics gui,PoseStack matrixStack, int x, int scaledHeight) {
-        mc.getProfiler().push("jumpBar");
+    	Profiler.get().push("jumpBar");
         RenderSystem.setShaderTexture(0, ACTUAL_ARMOR_TEXTURES);
         float f = mc.player.getJumpRidingScale();
 //		int i = 182;
         int j = (int) (f * 183.0F);
         int k = scaledHeight - 32 + 3 - HEIGHT;
-        gui.blitSprite(Gui.JUMP_BAR_BACKGROUND_SPRITE, x, k, 182, 5);
+        gui.blitSprite(RenderType.GUI_TEXTURED, Gui.JUMP_BAR_BACKGROUND_SPRITE, x, k, 182, 5);
         if (mc.player.jumpableVehicle().getJumpCooldown() > 0) {
-        	gui.blitSprite(Gui.JUMP_BAR_COOLDOWN_SPRITE, x, k, 182, 5);
+        	gui.blitSprite(RenderType.GUI_TEXTURED, Gui.JUMP_BAR_COOLDOWN_SPRITE, x, k, 182, 5);
         } else if (j > 0) {
-            gui.blitSprite(Gui.JUMP_BAR_PROGRESS_SPRITE, x, k, j, 5);
+            gui.blitSprite(RenderType.GUI_TEXTURED, Gui.JUMP_BAR_PROGRESS_SPRITE, x, k, j, 5);
         }
 
-        mc.getProfiler().pop();
+        Profiler.get().pop();
     }
 
     private static void renderVehicleHealth(GuiGraphics gui, PoseStack matrixStack, int scaledHeight, int scaledWidth) {
@@ -368,7 +370,7 @@ public class EventSubscriber {
             int i = getRenderMountHealth(livingentity);
             if (i != 0) {
                 int j = (int) Math.ceil((double) livingentity.getHealth());
-                mc.getProfiler().popPush("mountHealth");
+                Profiler.get().popPush("mountHealth");
                 int k = scaledHeight - 39 - HEIGHT;
                 int l = scaledWidth / 2 + 91;
                 int i1 = k;
@@ -382,13 +384,13 @@ public class EventSubscriber {
                         int i2 = 52;
                         int j2 = 0;
                         int k2 = l - l1 * 8 - 9;
-                        gui.blitSprite(Gui.HEART_VEHICLE_CONTAINER_SPRITE, k2, i1, 9, 9);
+                        gui.blitSprite(RenderType.GUI_TEXTURED, Gui.HEART_VEHICLE_CONTAINER_SPRITE, k2, i1, 9, 9);
                         if (l1 * 2 + 1 + j1 < j) {
-                            gui.blitSprite(Gui.HEART_VEHICLE_FULL_SPRITE, k2, i1, 9, 9);
+                            gui.blitSprite(RenderType.GUI_TEXTURED, Gui.HEART_VEHICLE_FULL_SPRITE, k2, i1, 9, 9);
                         }
 
                         if (l1 * 2 + 1 + j1 == j) {
-                            gui.blitSprite(Gui.HEART_VEHICLE_HALF_SPRITE, k2, i1, 9, 9);
+                            gui.blitSprite(RenderType.GUI_TEXTURED, Gui.HEART_VEHICLE_HALF_SPRITE, k2, i1, 9, 9);
                         }
                     }
 
@@ -443,9 +445,9 @@ public class EventSubscriber {
                 int k = (int) (mc.player.experienceLevel * 183.0F);
                 // -32 + 3
                 int l = mc.getWindow().getGuiScaledHeight() - 29 - HEIGHT;
-                gui.blitSprite(Gui.EXPERIENCE_BAR_BACKGROUND_SPRITE, x, l, j, 5);
+                gui.blitSprite(RenderType.GUI_TEXTURED, Gui.EXPERIENCE_BAR_BACKGROUND_SPRITE, x, l, j, 5);
                 if (k > 0) {
-                   gui.blitSprite(Gui.EXPERIENCE_BAR_PROGRESS_SPRITE, x, l, k, 5);
+                   gui.blitSprite(RenderType.GUI_TEXTURED, Gui.EXPERIENCE_BAR_PROGRESS_SPRITE, x, l, k, 5);
                 }
             }
 
@@ -464,7 +466,7 @@ public class EventSubscriber {
 
     private static void renderSelectedItem(GuiGraphics gui,PoseStack matrixStack, Minecraft mc, int scaledWidth, int scaledHeight,
                                            Font fontRenderer) {
-        mc.getProfiler().push("selectedItemName");
+    	Profiler.get().push("selectedItemName");
         if (remainingHighlightTicks > 0 && !highlightingItemStack.isEmpty()) {
 
             MutableComponent mutablecomponent = Component.empty().append(highlightingItemStack.getHoverName()).withStyle(highlightingItemStack.getRarity().getStyleModifier());
@@ -508,7 +510,7 @@ public class EventSubscriber {
             }
         }
 
-        mc.getProfiler().endTick();
+        Profiler.get().endTick();
     }
 
     @SubscribeEvent
