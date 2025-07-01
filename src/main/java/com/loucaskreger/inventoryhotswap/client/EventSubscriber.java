@@ -9,10 +9,14 @@ import org.anti_ad.mc.ipn.api.access.IPN;
 import org.lwjgl.glfw.GLFW;
 
 import com.loucaskreger.inventoryhotswap.InventoryHotswap;
+import com.loucaskreger.inventoryhotswap.common.RenderUtils;
 import com.loucaskreger.inventoryhotswap.config.ClientConfig;
 import com.loucaskreger.inventoryhotswap.config.Config;
+import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.systems.RenderSystem.AutoStorageIndexBuffer;
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.VertexFormat.Mode;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.KeyMapping;
@@ -87,7 +91,7 @@ public class EventSubscriber {
 
     private static ItemStack highlightingItemStack = ItemStack.EMPTY;
 
-    private static final Minecraft mc = Minecraft.getInstance();
+    private static Minecraft mc = Minecraft.getInstance();
 
     //another mod compatibility
     public static ModFileInfo ipn = null;
@@ -133,13 +137,21 @@ public class EventSubscriber {
 
     }
 
+    private static Minecraft getMC() {
+    	if (mc == null)
+    		mc = Minecraft.getInstance();
+    	return mc;
+    }
+    
     @SubscribeEvent
     public static void onGUIRender(final RenderGuiLayerEvent.Pre event) {
+    	if (getMC() == null)
+    		return;
     	if (isHideHotbar && event.getName().equals(VanillaGuiLayers.HOTBAR)) {
     		event.setCanceled(true);
     	}
         if (wasKeyDown) {
-        	Gui forgeGui = (Gui) mc.gui;
+        	Gui forgeGui = (Gui) getMC().gui;
         	if ((isGuiInvisible || isGuiPushed) && ALWAYS_HIDE_OVERLAYS.contains(event.getName())) {
         		event.setCanceled(true);
         	} else if (isGuiInvisible && HIDE_WHEN_GUI_INVISIBLE_OVERLAY.contains(event.getName())) {
@@ -157,11 +169,13 @@ public class EventSubscriber {
 
     @SubscribeEvent
     public static void onGUIRender(final RenderGuiLayerEvent.Post event) {
+    	if (getMC() == null)
+    		return;
 
-        Minecraft mc = Minecraft.getInstance();
-        NonNullList<ItemStack> inventory = mc.player.getInventory().items;
+        Minecraft mc = getMC();
+        NonNullList<ItemStack> inventory = mc.player.getInventory().getNonEquipmentItems();
 
-        int currentIndex = mc.player.getInventory().selected;
+        int currentIndex = mc.player.getInventory().getSelectedSlot();
         if (wasKeyDown) {
 
             mc.options.advancedItemTooltips = false;
@@ -179,15 +193,17 @@ public class EventSubscriber {
 
             //if (event.getType().equals(RenderGameOverlayEvent.ElementType.ALL)) {
                 if (renderEntireBar) {
+                    RenderPipeline usingPipeline = RenderUtils.buildGuiPipeline("render_entirebar");
+                    AutoStorageIndexBuffer asBuffer = RenderUtils.buildBuffer(Mode.QUADS);
                     matrixStack.pushPose();
                     RenderSystem.setShaderColor(1F, 1F, 1F, 1.0F);
-                    RenderSystem.enableBlend();
-                    RenderSystem.setShaderTexture(0, ACTUAL_ARMOR_TEXTURES);
+                    //RenderSystem.enableBlend();
+                    //RenderSystem.setShaderTexture(0, ACTUAL_ARMOR_TEXTURES);
                     for (int i = 0; i < 4; i++) {
                         gui.blitSprite(RenderType.GUI_TEXTURED, Gui.HOTBAR_SPRITE, width - 91, scaledHeight - WIDTH - (i * 22), 182, 22);
                     }
 
-                    RenderSystem.disableBlend();
+                    //RenderSystem.disableBlend();
                     matrixStack.popPose();
 
                     for (int k = 3; k > 0; k--) {
@@ -212,13 +228,13 @@ public class EventSubscriber {
                     }
                     matrixStack.pushPose();
                     RenderSystem.setShaderColor(1F, 1F, 1F, 1.0F);
-                    RenderSystem.enableBlend();
+                    //RenderSystem.enableBlend();
 
-                    RenderSystem.setShaderTexture(0, TEXTURE);
+                    //RenderSystem.setShaderTexture(0, TEXTURE);
                     // Render the selection square
                     gui.blit(RenderType.GUI_TEXTURED, TEXTURE, width - 92, scaledHeight - WIDTH - HEIGHT + scrollFunc(), 0f, 0f, 184, 24, 256, 256);
 
-                    RenderSystem.setShaderTexture(0, ACTUAL_ARMOR_TEXTURES);
+                    //RenderSystem.setShaderTexture(0, ACTUAL_ARMOR_TEXTURES);
                     int x = scaledWidth / 2 - 91;
 
                     renderVehicleHealth(gui, matrixStack, scaledHeight, scaledWidth);
@@ -227,19 +243,22 @@ public class EventSubscriber {
                     } else {
                         renderExpBar(gui, matrixStack, x);
                     }
-                    RenderSystem.disableBlend();
+                    //RenderSystem.disableBlend();
                     matrixStack.popPose();
+                    RenderUtils.renderIfExists(usingPipeline, asBuffer);
 
                 } else {
+                    RenderPipeline usingPipeline = RenderUtils.buildGuiPipeline("render_partialbar");
+                    AutoStorageIndexBuffer asBuffer = RenderUtils.buildBuffer(Mode.QUADS);
 
                     matrixStack.pushPose();
                     RenderSystem.setShaderColor(1F, 1F, 1F, 1.0F);
-                    RenderSystem.enableBlend();
-                    RenderSystem.setShaderTexture(0, ACTUAL_ARMOR_TEXTURES);
+                    //RenderSystem.enableBlend();
+                    //RenderSystem.setShaderTexture(0, ACTUAL_ARMOR_TEXTURES);
                     // Re-render hotbar without selection
                     gui.blitSprite(RenderType.GUI_TEXTURED, Gui.HOTBAR_SPRITE, width - 91, scaledHeight - WIDTH, 182, 22);
 
-                    RenderSystem.disableBlend();
+                    //RenderSystem.disableBlend();
                     matrixStack.popPose();
                     // Render items in re-rendered hotbar
                     for (int i1 = 0; i1 < 9; ++i1) {
@@ -251,9 +270,9 @@ public class EventSubscriber {
 
                     matrixStack.pushPose();
                     RenderSystem.setShaderColor(1F, 1F, 1F, 1.0F);
-                    RenderSystem.enableBlend();
+                    //RenderSystem.enableBlend();
 
-                    RenderSystem.setShaderTexture(0, VERT_TEXTURE);
+                    //RenderSystem.setShaderTexture(0, VERT_TEXTURE);
                     // Render the verticalbar
                     gui.blit(RenderType.GUI_TEXTURED, VERT_TEXTURE, width - 91 + (currentIndex * (WIDTH - 2)), scaledHeight - WIDTH - HEIGHT, 0,
                             0, WIDTH, HEIGHT, 256, 256);
@@ -273,7 +292,7 @@ public class EventSubscriber {
                                 fontRenderer);
                     }
 
-                    RenderSystem.setShaderTexture(0, ACTUAL_ARMOR_TEXTURES);
+                    //RenderSystem.setShaderTexture(0, ACTUAL_ARMOR_TEXTURES);
                     // Render the selection square
                     gui.blitSprite(RenderType.GUI_TEXTURED, Gui.HOTBAR_SELECTION_SPRITE, width - 92 + (currentIndex * (WIDTH - 2)),
                             scaledHeight - WIDTH - HEIGHT + scrollFunc(), 24, 24);
@@ -282,7 +301,7 @@ public class EventSubscriber {
                             fontRenderer);
 
                     // Reset the icon texture to stop hearts and hunger from being screwed up.
-                    RenderSystem.setShaderTexture(0, ACTUAL_ARMOR_TEXTURES);
+                    //RenderSystem.setShaderTexture(0, ACTUAL_ARMOR_TEXTURES);
 
                     int x = scaledWidth / 2 - 91;
 
@@ -292,8 +311,10 @@ public class EventSubscriber {
                     } else {
                         renderExpBar(gui, matrixStack, x);
                     }
-                    RenderSystem.disableBlend();
+                    //RenderSystem.disableBlend();
                     matrixStack.popPose();
+                    
+                    RenderUtils.renderIfExists(usingPipeline, asBuffer);
                 }
 
             //}
@@ -349,7 +370,7 @@ public class EventSubscriber {
 
     public static void renderHorseJumpBar(GuiGraphics gui,PoseStack matrixStack, int x, int scaledHeight) {
     	Profiler.get().push("jumpBar");
-        RenderSystem.setShaderTexture(0, ACTUAL_ARMOR_TEXTURES);
+        //RenderSystem.setShaderTexture(0, ACTUAL_ARMOR_TEXTURES);
         float f = mc.player.getJumpRidingScale();
 //		int i = 182;
         int j = (int) (f * 183.0F);
@@ -438,7 +459,7 @@ public class EventSubscriber {
     public static void renderExpBar(GuiGraphics gui, PoseStack matrixStack, int x) {
         if (isGuiPushed) {
 
-            RenderSystem.setShaderTexture(0, ACTUAL_ARMOR_TEXTURES);
+            //RenderSystem.setShaderTexture(0, ACTUAL_ARMOR_TEXTURES);
             int i = mc.player.getXpNeededForNextLevel();
             if (i > 0) {
                 int j = 182;
@@ -492,8 +513,8 @@ public class EventSubscriber {
             if (l > 0) {
 //                RenderSystem.pushMatrix();
                 matrixStack.pushPose();
-                RenderSystem.enableBlend();
-                RenderSystem.defaultBlendFunc();
+                //RenderSystem.enableBlend();
+                //RenderSystem.defaultBlendFunc();
                 gui.fill(j - 2, k - 2, j + i + 2, k + 9 + 2,
                         mc.options.getBackgroundColor(0));
                 //Font font = net.minecraftforge.client.RenderProperties.get(highlightingItemStack).getFont(highlightingItemStack);
@@ -505,7 +526,7 @@ public class EventSubscriber {
                 //    j = (scaledWidth - font.width(highlightTip)) / 2;
                 //    font.drawShadow(matrixStack, highlightTip, (float) j, (float) k, 16777215 + (l << 24));
                 //}
-                RenderSystem.disableBlend();
+                //RenderSystem.disableBlend();
                 matrixStack.popPose();
             }
         }
@@ -518,7 +539,7 @@ public class EventSubscriber {
         Minecraft mc = Minecraft.getInstance();
         MultiPlayerGameMode pc = mc.gameMode;
         if (mc.player != null) {
-            ItemStack itemstack = mc.player.getInventory().items.get(getIndex(mc.player.getInventory().selected));
+            ItemStack itemstack = mc.player.getInventory().getSelectedItem();
             if (itemstack.isEmpty()) {
                 remainingHighlightTicks = 0;
             } else if (!highlightingItemStack.isEmpty() && itemstack.getItem() == highlightingItemStack.getItem()
@@ -555,7 +576,7 @@ public class EventSubscriber {
             wasKeyDown = true;
         } else if (wasKeyDown) {
             if (accumulatedScrollDelta != 0) {
-                currentIndex = mc.player.getInventory().selected;
+                currentIndex = mc.player.getInventory().getSelectedSlot();
                 if (renderEntireBar) {
                     for (int i = 0; i < 9; i++) {
                     	swapItem(pc, getIndex(i), i);
@@ -572,7 +593,7 @@ public class EventSubscriber {
             clear();
 
         } else if (moveToCorrectSlot && currentIndex != -1) {
-            mc.player.getInventory().selected = currentIndex;
+            mc.player.getInventory().setSelectedSlot(currentIndex);
             moveToCorrectSlot = false;
         }
     }
