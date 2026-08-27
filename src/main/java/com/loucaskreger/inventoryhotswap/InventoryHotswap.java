@@ -35,7 +35,7 @@ public class InventoryHotswap {
     }
 
     private void setupCompatibility() {
-    	LoadingModList modlist = FMLLoader.getLoadingModList();
+    	LoadingModList modlist = FMLLoader.getCurrent().getLoadingModList();
     	EventSubscriber.ipn = modlist.getModFileById("inventoryprofilesnext");
 
     }

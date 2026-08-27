@@ -1,4 +1,4 @@
-package com.loucaskreger.inventoryhotswap.client;
+	package com.loucaskreger.inventoryhotswap.client;
 
 import static java.util.Map.*;
 
@@ -6,39 +6,46 @@ import java.util.List;
 import java.util.Map;
 
 import org.anti_ad.mc.ipn.api.access.IPN;
+import org.joml.Matrix3x2fStack;
 import org.lwjgl.glfw.GLFW;
 
 import com.loucaskreger.inventoryhotswap.InventoryHotswap;
 import com.loucaskreger.inventoryhotswap.common.RenderUtils;
+import com.loucaskreger.inventoryhotswap.common.RenderingChannelBuilder;
 import com.loucaskreger.inventoryhotswap.config.ClientConfig;
 import com.loucaskreger.inventoryhotswap.config.Config;
-import com.mojang.blaze3d.pipeline.RenderPipeline;
-import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.systems.RenderSystem.AutoStorageIndexBuffer;
-import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexFormat.Mode;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.Gui;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.contextualbar.ExperienceBarRenderer;
+import net.minecraft.client.gui.contextualbar.JumpableVehicleBarRenderer;
+import net.minecraft.client.gui.contextualbar.LocatorBarRenderer;
 import net.minecraft.client.multiplayer.MultiPlayerGameMode;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.client.renderer.RenderType;
-import net.minecraft.client.renderer.entity.ItemRenderer;
+import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.client.resources.WaypointStyle;
 import net.minecraft.core.NonNullList;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
+import net.minecraft.util.ARGB;
+import net.minecraft.util.Mth;
 import net.minecraft.util.profiling.Profiler;
+import net.minecraft.world.TickRateManager;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.inventory.ClickType;
+import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.waypoints.PartialTickSupplier;
+import net.minecraft.world.waypoints.TrackedWaypoint;
+import net.minecraft.world.waypoints.Waypoint;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -53,19 +60,19 @@ import net.neoforged.neoforge.client.gui.VanillaGuiLayers;
 @EventBusSubscriber(modid = InventoryHotswap.MOD_ID, value = Dist.CLIENT)
 public class EventSubscriber {
 
-    public static final KeyMapping vertScroll = new KeyMapping(InventoryHotswap.MOD_ID + ".key.verticalscroll",
-    		GLFW.GLFW_KEY_LEFT_ALT, InventoryHotswap.MOD_ID + ".key.categories");
+	public static final KeyMapping.Category INVENTORY_HOTSWAP_CATEGORY = KeyMapping.Category.register(Identifier.fromNamespaceAndPath(InventoryHotswap.MOD_ID, "key.categories"));
+    public static final KeyMapping vertScroll = new KeyMapping(InventoryHotswap.MOD_ID + ".key.verticalscroll",GLFW.GLFW_KEY_LEFT_ALT, INVENTORY_HOTSWAP_CATEGORY);
 
     private static final int[] slotsScrollDown = {0, 9, 18, 27};
     private static final int[] slotsScrollUp = {0, 27, 18, 9};
 
     private static final int[] selectedScrollPositions = {65, 43, 21, -1};
 //	private static final int[] largeSelectedScrollPositions = { 65, 43, 21, -1 };
-    private static final List<ResourceLocation> ALWAYS_HIDE_OVERLAYS = List.of(VanillaGuiLayers.EXPERIENCE_BAR, VanillaGuiLayers.VEHICLE_HEALTH, VanillaGuiLayers.JUMP_METER);
-    private static final List<ResourceLocation> HIDE_WHEN_GUI_INVISIBLE_OVERLAY = List.of(VanillaGuiLayers.FOOD_LEVEL,VanillaGuiLayers.PLAYER_HEALTH, VanillaGuiLayers.ARMOR_LEVEL, VanillaGuiLayers.AIR_LEVEL);
-    private static final Map<ResourceLocation, Integer> PUSHED_GUI_LAYER = Map.ofEntries(entry(VanillaGuiLayers.FOOD_LEVEL ,1), entry(VanillaGuiLayers.PLAYER_HEALTH, 2), entry(VanillaGuiLayers.ARMOR_LEVEL, 1), entry(VanillaGuiLayers.AIR_LEVEL, 2));
+    private static final List<Identifier> ALWAYS_HIDE_OVERLAYS = List.of(VanillaGuiLayers.CONTEXTUAL_INFO_BAR_BACKGROUND, VanillaGuiLayers.EXPERIENCE_LEVEL, VanillaGuiLayers.CONTEXTUAL_INFO_BAR, VanillaGuiLayers.VEHICLE_HEALTH);
+    private static final List<Identifier> HIDE_WHEN_GUI_INVISIBLE_OVERLAY = List.of(VanillaGuiLayers.FOOD_LEVEL,VanillaGuiLayers.PLAYER_HEALTH, VanillaGuiLayers.ARMOR_LEVEL, VanillaGuiLayers.AIR_LEVEL);
+    private static final Map<Identifier, Integer> PUSHED_GUI_LAYER = Map.ofEntries(entry(VanillaGuiLayers.FOOD_LEVEL ,1), entry(VanillaGuiLayers.PLAYER_HEALTH, 1), entry(VanillaGuiLayers.ARMOR_LEVEL, 2), entry(VanillaGuiLayers.AIR_LEVEL, 2));
 
-	private static final ResourceLocation ACTUAL_ARMOR_TEXTURES = ResourceLocation.withDefaultNamespace("textures/gui/sprites/hud/armor_full.png");
+	private static final Identifier ACTUAL_ARMOR_TEXTURES = Identifier.withDefaultNamespace("textures/gui/sprites/hud/armor_full.png");
 
     /**
      * The value of the left_height and right_height in {@link ForgeIngameGui}
@@ -74,8 +81,8 @@ public class EventSubscriber {
     private static final int WIDTH = 22;
     private static final int HEIGHT = 66;
 
-    private static final ResourceLocation VERT_TEXTURE = ResourceLocation.fromNamespaceAndPath(InventoryHotswap.MOD_ID, "textures/gui/verticalbar.png");
-    private static final ResourceLocation TEXTURE = ResourceLocation.fromNamespaceAndPath(InventoryHotswap.MOD_ID, "textures/gui/largebarselection.png");
+    private static final Identifier VERT_TEXTURE = Identifier.fromNamespaceAndPath(InventoryHotswap.MOD_ID, "textures/gui/verticalbar.png");
+    private static final Identifier TEXTURE = Identifier.fromNamespaceAndPath(InventoryHotswap.MOD_ID, "textures/gui/largebarselection.png");
 
     private static int accumulatedScrollDelta = 0;
     private static int textOffset = 0;
@@ -185,30 +192,28 @@ public class EventSubscriber {
 
             int width = (scaledWidth / 2);
 
-            GuiGraphics gui = event.getGuiGraphics();
+            GuiGraphicsExtractor gui = event.getGuiGraphics();
 
-            ItemRenderer itemRenderer = mc.getItemRenderer();
             Font fontRenderer = mc.font;
-            PoseStack matrixStack = gui.pose();
+            Matrix3x2fStack matrixStack = gui.pose();
 
             //if (event.getType().equals(RenderGameOverlayEvent.ElementType.ALL)) {
                 if (renderEntireBar) {
-                    RenderPipeline usingPipeline = RenderUtils.buildGuiPipeline("render_entirebar");
-                    AutoStorageIndexBuffer asBuffer = RenderUtils.buildBuffer(Mode.QUADS);
-                    matrixStack.pushPose();
-                    RenderSystem.setShaderColor(1F, 1F, 1F, 1.0F);
+                	RenderingChannelBuilder builder = new RenderingChannelBuilder(RenderUtils.getColoredGuiRenderType("render_entirebar"));
+                    matrixStack.pushMatrix();
+                    //RenderSystem.setShaderColor(1F, 1F, 1F, 1.0F);
                     //RenderSystem.enableBlend();
                     //RenderSystem.setShaderTexture(0, ACTUAL_ARMOR_TEXTURES);
                     for (int i = 0; i < 4; i++) {
-                        gui.blitSprite(RenderType.GUI_TEXTURED, Gui.HOTBAR_SPRITE, width - 91, scaledHeight - WIDTH - (i * 22), 182, 22);
+                        gui.blitSprite(RenderPipelines.GUI_TEXTURED, Gui.HOTBAR_SPRITE, width - 91, scaledHeight - WIDTH - (i * 22), 182, 22);
                     }
 
                     //RenderSystem.disableBlend();
-                    matrixStack.popPose();
+                    //matrixStack.popPose();
 
                     for (int k = 3; k > 0; k--) {
                         int l = ClientConfig.inverted.get() ? Math.abs(k - 3) + 1 : k;
-                        gui.drawString(fontRenderer, String.valueOf(k), width - 98,
+                        gui.text(fontRenderer, String.valueOf(k), width - 98,
                                 scaledHeight - 13 - (l * 22), 0xFFFFFF);
                     }
 
@@ -217,104 +222,80 @@ public class EventSubscriber {
                         int j1 = width - 90 + i1 * 20 + 2;
                         int k1 = scaledHeight - 16 - 3;
 
-                        renderHotbarItem(gui, matrixStack, j1, k1, event.getPartialTick().getGameTimeDeltaTicks(), inventory.get(i1), itemRenderer,
-                                fontRenderer);
-                        renderHotbarItem(gui, matrixStack, j1, k1 - 22, event.getPartialTick().getGameTimeDeltaTicks(), inventory.get(i1 + 27),
-                                itemRenderer, fontRenderer);
-                        renderHotbarItem(gui, matrixStack, j1, k1 - 44, event.getPartialTick().getGameTimeDeltaTicks(), inventory.get(i1 + 18),
-                                itemRenderer, fontRenderer);
-                        renderHotbarItem(gui, matrixStack, j1, k1 - 66, event.getPartialTick().getGameTimeDeltaTicks(), inventory.get(i1 + 9),
-                                itemRenderer, fontRenderer);
+                        renderHotbarItem(gui, matrixStack, j1, k1     , event.getPartialTick().getGameTimeDeltaTicks(), inventory.get(i1)     , fontRenderer);
+                        renderHotbarItem(gui, matrixStack, j1, k1 - 22, event.getPartialTick().getGameTimeDeltaTicks(), inventory.get(i1 + 27), fontRenderer);
+                        renderHotbarItem(gui, matrixStack, j1, k1 - 44, event.getPartialTick().getGameTimeDeltaTicks(), inventory.get(i1 + 18), fontRenderer);
+                        renderHotbarItem(gui, matrixStack, j1, k1 - 66, event.getPartialTick().getGameTimeDeltaTicks(), inventory.get(i1 + 9) , fontRenderer);
                     }
-                    matrixStack.pushPose();
-                    RenderSystem.setShaderColor(1F, 1F, 1F, 1.0F);
+                    //matrixStack.pushPose();
+                    //RenderSystem.setShaderColor(1F, 1F, 1F, 1.0F);
                     //RenderSystem.enableBlend();
 
                     //RenderSystem.setShaderTexture(0, TEXTURE);
                     // Render the selection square
-                    gui.blit(RenderType.GUI_TEXTURED, TEXTURE, width - 92, scaledHeight - WIDTH - HEIGHT + scrollFunc(), 0f, 0f, 184, 24, 256, 256);
+                    gui.blit(RenderPipelines.GUI_TEXTURED, TEXTURE, width - 92, scaledHeight - WIDTH - HEIGHT + scrollFunc(), 0f, 0f, 184, 24, 256, 256);
 
                     //RenderSystem.setShaderTexture(0, ACTUAL_ARMOR_TEXTURES);
                     int x = scaledWidth / 2 - 91;
 
                     renderVehicleHealth(gui, matrixStack, scaledHeight, scaledWidth);
-                    if (mc.player.jumpableVehicle() != null) {
-                        renderHorseJumpBar(gui, matrixStack, x, scaledHeight);
-                    } else {
-                        renderExpBar(gui, matrixStack, x);
-                    }
+                    //if (mc.player.jumpableVehicle() != null) {
+                    //    renderHorseJumpBar(gui, matrixStack, x, scaledHeight);
+                    //} else {
+                    //    renderExpBar(gui, matrixStack, x);
+                    //}
+                    renderContextualBar(gui, matrixStack, x, scaledHeight);
                     //RenderSystem.disableBlend();
-                    matrixStack.popPose();
-                    RenderUtils.renderIfExists(usingPipeline, asBuffer);
+                    matrixStack.popMatrix();
+                    //RenderUtils.renderIfExists(usingPipeline, asBuffer);
+                    builder.closeChannel();
 
                 } else {
-                    RenderPipeline usingPipeline = RenderUtils.buildGuiPipeline("render_partialbar");
-                    AutoStorageIndexBuffer asBuffer = RenderUtils.buildBuffer(Mode.QUADS);
+                	RenderingChannelBuilder builder = new RenderingChannelBuilder(RenderUtils.getColoredGuiRenderType("render_partialbar"));
 
-                    matrixStack.pushPose();
-                    RenderSystem.setShaderColor(1F, 1F, 1F, 1.0F);
-                    //RenderSystem.enableBlend();
-                    //RenderSystem.setShaderTexture(0, ACTUAL_ARMOR_TEXTURES);
-                    // Re-render hotbar without selection
-                    gui.blitSprite(RenderType.GUI_TEXTURED, Gui.HOTBAR_SPRITE, width - 91, scaledHeight - WIDTH, 182, 22);
+                    matrixStack.pushMatrix();
+                    gui.blitSprite(RenderPipelines.GUI_TEXTURED, Gui.HOTBAR_SPRITE, width - 91, scaledHeight - WIDTH, 182, 22);
+                    matrixStack.popMatrix();
 
-                    //RenderSystem.disableBlend();
-                    matrixStack.popPose();
-                    // Render items in re-rendered hotbar
                     for (int i1 = 0; i1 < 9; ++i1) {
                         int j1 = width - 90 + i1 * 20 + 2;
                         int k1 = scaledHeight - 16 - 3;
-                        renderHotbarItem(gui, matrixStack, j1, k1, event.getPartialTick().getGameTimeDeltaTicks(), inventory.get(i1), itemRenderer,
-                                fontRenderer);
+                        renderHotbarItem(gui, matrixStack, j1, k1, event.getPartialTick().getGameTimeDeltaTicks(), inventory.get(i1), fontRenderer);
                     }
 
-                    matrixStack.pushPose();
-                    RenderSystem.setShaderColor(1F, 1F, 1F, 1.0F);
-                    //RenderSystem.enableBlend();
-
-                    //RenderSystem.setShaderTexture(0, VERT_TEXTURE);
-                    // Render the verticalbar
-                    gui.blit(RenderType.GUI_TEXTURED, VERT_TEXTURE, width - 91 + (currentIndex * (WIDTH - 2)), scaledHeight - WIDTH - HEIGHT, 0,
+                    matrixStack.pushMatrix();
+                    gui.blit(RenderPipelines.GUI_TEXTURED, VERT_TEXTURE, width - 91 + (currentIndex * (WIDTH - 2)), scaledHeight - WIDTH - HEIGHT, 0,
                             0, WIDTH, HEIGHT, 256, 256);
 
                     for (int k = 3; k > 0; k--) {
                         int l = ClientConfig.inverted.get() ? Math.abs(k - 3) + 1 : k;
-                        gui.drawString(fontRenderer, String.valueOf(k),
+                        gui.text(fontRenderer, String.valueOf(k),
                                 width - 98 + (currentIndex * (WIDTH - 2)), scaledHeight - 13 - (l * 22), 0xFFFFFF);
                     }
-                    // Render items in the verticalbar
+
                     for (int i = 27, j = 22; i > 0; i -= 9, j += 22) {
                         int j1 = width - 88 + (currentIndex * (WIDTH - 2));
                         int k1 = scaledHeight - 16 - 3;
                         ItemStack stack = inventory.get(currentIndex + i);
 
-                        renderHotbarItem(gui, matrixStack, j1, k1 - j, event.getPartialTick().getGameTimeDeltaTicks(), stack, itemRenderer,
-                                fontRenderer);
+                        renderHotbarItem(gui, matrixStack, j1, k1 - j, event.getPartialTick().getGameTimeDeltaTicks(), stack, fontRenderer);
                     }
 
-                    //RenderSystem.setShaderTexture(0, ACTUAL_ARMOR_TEXTURES);
                     // Render the selection square
-                    gui.blitSprite(RenderType.GUI_TEXTURED, Gui.HOTBAR_SELECTION_SPRITE, width - 92 + (currentIndex * (WIDTH - 2)),
+                    gui.blitSprite(RenderPipelines.GUI_TEXTURED, Gui.HOTBAR_SELECTION_SPRITE, width - 92 + (currentIndex * (WIDTH - 2)),
                             scaledHeight - WIDTH - HEIGHT + scrollFunc(), 24, 24);
 
                     renderSelectedItem(gui, matrixStack, mc, scaledWidth, scaledHeight,
                             fontRenderer);
 
                     // Reset the icon texture to stop hearts and hunger from being screwed up.
-                    //RenderSystem.setShaderTexture(0, ACTUAL_ARMOR_TEXTURES);
-
                     int x = scaledWidth / 2 - 91;
 
                     renderVehicleHealth(gui, matrixStack, scaledHeight, scaledWidth);
-                    if (mc.player.jumpableVehicle() != null) {
-                        renderHorseJumpBar(gui, matrixStack, x, scaledHeight);
-                    } else {
-                        renderExpBar(gui, matrixStack, x);
-                    }
-                    //RenderSystem.disableBlend();
-                    matrixStack.popPose();
-                    
-                    RenderUtils.renderIfExists(usingPipeline, asBuffer);
+                    renderContextualBar(gui, matrixStack, x, scaledHeight);
+                    matrixStack.popMatrix();
+
+                    builder.closeChannel();
                 }
 
             //}
@@ -346,46 +327,45 @@ public class EventSubscriber {
      * @param itemRenderer
      * @param fontRenderer
      */
-    private static void renderHotbarItem(GuiGraphics gui, PoseStack matrixStack, int x, int y, float partialTicks, ItemStack stack,
-                                         ItemRenderer itemRenderer, Font fontRenderer) {
+    private static void renderHotbarItem(GuiGraphicsExtractor gui, Matrix3x2fStack matrixStack, int x, int y, float partialTicks, ItemStack stack, Font fontRenderer) {
         if (!stack.isEmpty()) {
             float f = (float) stack.getPopTime() - partialTicks;
             if (f > 0.0F) {
-//                RenderSystem.pushMatrix();
-                matrixStack.pushPose();
+                //RenderSystem.pushMatrix();
+                matrixStack.pushMatrix();
                 float f1 = 1.0F + f / 5.0F;
-                matrixStack.translate((float) (x + 8), (float) (y + 12), 0.0F);
-                matrixStack.scale(1.0F / f1, (f1 + 1.0F) / 2.0F, 1.0F);
-                matrixStack.translate((float) (-(x + 8)), (float) (-(y + 12)), 0.0F);
+                matrixStack.translate((float) (x + 8), (float) (y + 12));
+                matrixStack.scale(1.0F / f1, (f1 + 1.0F) / 2.0F);
+                matrixStack.translate((float) (-(x + 8)), (float) (-(y + 12)));
             }
 
-            gui.renderItem(stack, x, y);
+            gui.item(stack, x, y);
             if (f > 0.0F) {
-                matrixStack.popPose();
+                matrixStack.popMatrix();
             }
 
-            gui.renderItemDecorations(fontRenderer, stack, x, y);
+            gui.itemDecorations(fontRenderer, stack, x, y);
         }
     }
 
-    public static void renderHorseJumpBar(GuiGraphics gui,PoseStack matrixStack, int x, int scaledHeight) {
+    public static void renderHorseJumpBar(GuiGraphicsExtractor gui, Matrix3x2fStack matrixStack, int x, int scaledHeight) {
     	Profiler.get().push("jumpBar");
         //RenderSystem.setShaderTexture(0, ACTUAL_ARMOR_TEXTURES);
         float f = mc.player.getJumpRidingScale();
 //		int i = 182;
         int j = (int) (f * 183.0F);
         int k = scaledHeight - 32 + 3 - HEIGHT;
-        gui.blitSprite(RenderType.GUI_TEXTURED, Gui.JUMP_BAR_BACKGROUND_SPRITE, x, k, 182, 5);
+        gui.blitSprite(RenderPipelines.GUI_TEXTURED, JumpableVehicleBarRenderer.JUMP_BAR_BACKGROUND_SPRITE, x, k, 182, 5);
         if (mc.player.jumpableVehicle().getJumpCooldown() > 0) {
-        	gui.blitSprite(RenderType.GUI_TEXTURED, Gui.JUMP_BAR_COOLDOWN_SPRITE, x, k, 182, 5);
+        	gui.blitSprite(RenderPipelines.GUI_TEXTURED, JumpableVehicleBarRenderer.JUMP_BAR_COOLDOWN_SPRITE, x, k, 182, 5);
         } else if (j > 0) {
-            gui.blitSprite(RenderType.GUI_TEXTURED, Gui.JUMP_BAR_PROGRESS_SPRITE, x, k, j, 5);
+            gui.blitSprite(RenderPipelines.GUI_TEXTURED, JumpableVehicleBarRenderer.JUMP_BAR_PROGRESS_SPRITE, 182, 5, 0, 0, x, k, j, 5);
         }
 
         Profiler.get().pop();
     }
 
-    private static void renderVehicleHealth(GuiGraphics gui, PoseStack matrixStack, int scaledHeight, int scaledWidth) {
+    private static void renderVehicleHealth(GuiGraphicsExtractor gui, Matrix3x2fStack matrixStack, int scaledHeight, int scaledWidth) {
         LivingEntity livingentity = getMountEntity();
         if (livingentity != null) {
             int i = getRenderMountHealth(livingentity);
@@ -405,13 +385,13 @@ public class EventSubscriber {
                         int i2 = 52;
                         int j2 = 0;
                         int k2 = l - l1 * 8 - 9;
-                        gui.blitSprite(RenderType.GUI_TEXTURED, Gui.HEART_VEHICLE_CONTAINER_SPRITE, k2, i1, 9, 9);
+                        gui.blitSprite(RenderPipelines.GUI_TEXTURED, Gui.HEART_VEHICLE_CONTAINER_SPRITE, k2, i1, 9, 9);
                         if (l1 * 2 + 1 + j1 < j) {
-                            gui.blitSprite(RenderType.GUI_TEXTURED, Gui.HEART_VEHICLE_FULL_SPRITE, k2, i1, 9, 9);
+                            gui.blitSprite(RenderPipelines.GUI_TEXTURED, Gui.HEART_VEHICLE_FULL_SPRITE, k2, i1, 9, 9);
                         }
 
                         if (l1 * 2 + 1 + j1 == j) {
-                            gui.blitSprite(RenderType.GUI_TEXTURED, Gui.HEART_VEHICLE_HALF_SPRITE, k2, i1, 9, 9);
+                            gui.blitSprite(RenderPipelines.GUI_TEXTURED, Gui.HEART_VEHICLE_HALF_SPRITE, k2, i1, 9, 9);
                         }
                     }
 
@@ -455,8 +435,26 @@ public class EventSubscriber {
 
         return null;
     }
+    
+    private static void renderContextualBar(GuiGraphicsExtractor gui, Matrix3x2fStack matrixStack, int x, int scaledHeight) {
+    	switch (mc.gui.contextualInfoBar.getKey()) {
+    		case Gui.ContextualInfo.EMPTY:
+    			break;
+    		case Gui.ContextualInfo.EXPERIENCE:
+    			renderExpBar(gui, matrixStack, x);
+    			break;
+    		case Gui.ContextualInfo.LOCATOR:
+    			renderLocaterBar(gui, matrixStack, x);
+    			break;
+    		case Gui.ContextualInfo.JUMPABLE_VEHICLE:
+    			renderHorseJumpBar(gui, matrixStack, x, scaledHeight);
+    			break;
+    		default:
+    			throw new IllegalArgumentException();	
+    	};
+    }
 
-    public static void renderExpBar(GuiGraphics gui, PoseStack matrixStack, int x) {
+    public static void renderExpBar(GuiGraphicsExtractor gui, Matrix3x2fStack matrixStack, int x) {
         if (isGuiPushed) {
 
             //RenderSystem.setShaderTexture(0, ACTUAL_ARMOR_TEXTURES);
@@ -466,9 +464,9 @@ public class EventSubscriber {
                 int k = (int) (mc.player.experienceLevel * 183.0F);
                 // -32 + 3
                 int l = mc.getWindow().getGuiScaledHeight() - 29 - HEIGHT;
-                gui.blitSprite(RenderType.GUI_TEXTURED, Gui.EXPERIENCE_BAR_BACKGROUND_SPRITE, x, l, j, 5);
+                gui.blitSprite(RenderPipelines.GUI_TEXTURED, ExperienceBarRenderer.EXPERIENCE_BAR_BACKGROUND_SPRITE, x, l, j, 5);
                 if (k > 0) {
-                   gui.blitSprite(RenderType.GUI_TEXTURED, Gui.EXPERIENCE_BAR_PROGRESS_SPRITE, x, l, k, 5);
+                   gui.blitSprite(RenderPipelines.GUI_TEXTURED, ExperienceBarRenderer.EXPERIENCE_BAR_PROGRESS_SPRITE, 182, 5, 0, 0, x, l, k, 5);
                 }
             }
 
@@ -476,16 +474,75 @@ public class EventSubscriber {
                 String s = "" + mc.player.experienceLevel;
                 int i1 = (mc.getWindow().getGuiScaledWidth() - mc.font.width(s)) / 2;
                 int j1 = mc.getWindow().getGuiScaledHeight() - 31 - 4 - HEIGHT;
-                gui.drawString(mc.font, s, (float) (i1 + 1), (float) j1, 0, true);
-                gui.drawString(mc.font, s, (float) (i1 - 1), (float) j1, 0, true);
-                gui.drawString(mc.font, s, (float) i1, (float) (j1 + 1), 0, true);
-                gui.drawString(mc.font, s, (float) i1, (float) (j1 - 1), 0, true);
-                gui.drawString(mc.font, s, (float) i1, (float) j1, 8453920, true);
+                gui.text(mc.font, s, (int) (i1 + 1), (int) j1, ARGB.opaque(0), true);
+                gui.text(mc.font, s, (int) (i1 - 1), (int) j1, ARGB.opaque(0), true);
+                gui.text(mc.font, s, (int) i1, (int) (j1 + 1), ARGB.opaque(0), true);
+                gui.text(mc.font, s, (int) i1, (int) (j1 - 1), ARGB.opaque(0), true);
+                gui.text(mc.font, s, (int) i1, (int) j1, ARGB.opaque(8453920), true);
             }
         }
     }
 
-    private static void renderSelectedItem(GuiGraphics gui,PoseStack matrixStack, Minecraft mc, int scaledWidth, int scaledHeight,
+    public static void renderLocaterBar(GuiGraphicsExtractor gui, Matrix3x2fStack matrixStack, int x) {
+        if (isGuiPushed) {
+           int left = x; //(mc.getWindow().getGuiScaledWidth() - 182) / 2;
+           int top = mc.getWindow().getGuiScaledHeight() - 24 - 5;
+           gui.blitSprite(RenderPipelines.GUI_TEXTURED, LocatorBarRenderer.LOCATOR_BAR_BACKGROUND, left, top, 182, 5);
+            Entity cameraEntity = mc.getCameraEntity();
+            if (cameraEntity != null) {
+                Level level = cameraEntity.level();
+                TickRateManager tickRateManager = level.tickRateManager();
+                PartialTickSupplier partialTickSupplier = entity -> mc.getDeltaTracker().getGameTimeDeltaPartialTick(!tickRateManager.isEntityFrozen(entity));
+                mc
+                    .player
+                    .connection
+                    .getWaypointManager()
+                    .forEachWaypoint(
+                        cameraEntity,
+                        waypoint -> {
+                            if (!waypoint.id().left().map(uuid -> uuid.equals(cameraEntity.getUUID())).orElse(false)) {
+                                double angle = waypoint.yawAngleToCamera(level, mc.gameRenderer.getMainCamera(), partialTickSupplier);
+                                if (!(angle <= -60.0) && !(angle > 60.0)) {
+                                    int screenMiddle = Mth.ceil((gui.guiWidth() - 9) / 2.0F);
+                                    Waypoint.Icon icon = waypoint.icon();
+                                    WaypointStyle style = mc.getWaypointStyles().get(icon.style);
+                                    float distance = Mth.sqrt((float)waypoint.distanceSquared(cameraEntity));
+                                    Identifier sprite = style.sprite(distance);
+                                    int color = icon.color
+                                        .orElseGet(
+                                            () -> waypoint.id()
+                                                .map(
+                                                    uuid -> ARGB.setBrightness(ARGB.color(255, uuid.hashCode()), 0.9F),
+                                                    name -> ARGB.setBrightness(ARGB.color(255, name.hashCode()), 0.9F)
+                                                )
+                                        );
+                                    int dotPosition = Mth.floor(angle * 173.0 / 2.0 / 60.0);
+                                    gui.blitSprite(RenderPipelines.GUI_TEXTURED, sprite, screenMiddle + dotPosition, top - 2, 9, 9, color);
+                                    TrackedWaypoint.PitchDirection pitchDirection = waypoint.pitchDirectionToCamera(
+                                        level, mc.gameRenderer, partialTickSupplier
+                                    );
+                                    if (pitchDirection != TrackedWaypoint.PitchDirection.NONE) {
+                                        int arrowTop;
+                                        Identifier arrowSprite;
+                                        if (pitchDirection == TrackedWaypoint.PitchDirection.DOWN) {
+                                            arrowTop = 6;
+                                            arrowSprite = LocatorBarRenderer.LOCATOR_BAR_ARROW_DOWN;
+                                        } else {
+                                            arrowTop = -6;
+                                            arrowSprite = LocatorBarRenderer.LOCATOR_BAR_ARROW_UP;
+                                        }
+
+                                        gui.blitSprite(RenderPipelines.GUI_TEXTURED, arrowSprite, screenMiddle + dotPosition + 1, top + arrowTop, 7, 5);
+                                    }
+                                }
+                            }
+                        }
+                    );
+            }
+        }
+    }
+
+    private static void renderSelectedItem(GuiGraphicsExtractor gui,Matrix3x2fStack matrixStack, Minecraft mc, int scaledWidth, int scaledHeight,
                                            Font fontRenderer) {
     	Profiler.get().push("selectedItemName");
         if (remainingHighlightTicks > 0 && !highlightingItemStack.isEmpty()) {
@@ -512,14 +569,14 @@ public class EventSubscriber {
 
             if (l > 0) {
 //                RenderSystem.pushMatrix();
-                matrixStack.pushPose();
+                matrixStack.pushMatrix();
                 //RenderSystem.enableBlend();
                 //RenderSystem.defaultBlendFunc();
                 gui.fill(j - 2, k - 2, j + i + 2, k + 9 + 2,
                         mc.options.getBackgroundColor(0));
                 //Font font = net.minecraftforge.client.RenderProperties.get(highlightingItemStack).getFont(highlightingItemStack);
                 //if (font == null) {
-                    gui.drawString(fontRenderer, highlightTip, j, k,
+                    gui.text(fontRenderer, highlightTip, j, k,
                             16777215 + (l << 24));
                 //} else {
                 //    j = (scaledWidth - font.width(highlightTip)) / 2;
@@ -527,7 +584,7 @@ public class EventSubscriber {
                 //    font.drawShadow(matrixStack, highlightTip, (float) j, (float) k, 16777215 + (l << 24));
                 //}
                 //RenderSystem.disableBlend();
-                matrixStack.popPose();
+                matrixStack.popMatrix();
             }
         }
 
@@ -627,7 +684,7 @@ public class EventSubscriber {
     	if (ipn != null) {
     		IPN.getInstance().getContainerClicker().swap(target1, target2);
     	} else {
-            pc.handleInventoryMouseClick(mc.player.inventoryMenu.containerId, target1, target2, ClickType.SWAP, mc.player);
+            pc.handleContainerInput(mc.player.inventoryMenu.containerId, target1, target2, ContainerInput.SWAP, mc.player);
     	}
     }
 
